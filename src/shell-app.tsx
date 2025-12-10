@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   createHashHistory,
   createRootRoute,
@@ -7,6 +7,7 @@ import {
   Link,
   Outlet,
   RouterProvider,
+  useRouterState,
 } from '@tanstack/react-router';
 
 /**
@@ -21,76 +22,71 @@ import {
  * still receives the history event and tries to match /settings, showing 404.
  */
 
-// Track if MFE has been loaded at least once
-let mfeHasBeenLoaded = false;
+function ShellLayout() {
+  const routerState = useRouterState();
+  const [mfeLoaded, setMfeLoaded] = useState(false);
+
+  // Get current path from router state
+  const currentPath = routerState.location.pathname;
+  const currentHash = `#${currentPath}`;
+
+  // Check if we're on an MFE route
+  const isOnMfeRoute = currentPath.startsWith('/mfe');
+
+  // Once MFE route is visited, mark it as loaded
+  if (isOnMfeRoute && !mfeLoaded) {
+    setMfeLoaded(true);
+  }
+
+  return (
+    <div className="shell-app">
+      <div className="shell-header">
+        <h1>Shell Application (TanStack Router)</h1>
+        <nav className="shell-nav">
+          <Link to="/">Home</Link>
+          <Link to="/settings">Settings</Link>
+          <Link to="/mfe/page1">MFE Page 1</Link>
+          <Link to="/mfe/page2">MFE Page 2</Link>
+        </nav>
+      </div>
+      <div className="shell-content">
+        <div className="current-url">
+          Current URL: <strong>{currentHash}</strong>
+        </div>
+
+        {/* Shell content area */}
+        <Outlet />
+
+        {/*
+          MFE stays mounted after first load to demonstrate the bug.
+          In real MFE architectures, the MFE container often persists.
+        */}
+        {mfeLoaded && (
+          <div style={{ marginTop: '20px' }}>
+            {!isOnMfeRoute && (
+              <div style={{
+                background: '#fff3cd',
+                border: '1px solid #ffc107',
+                padding: '10px',
+                borderRadius: '4px',
+                marginBottom: '10px'
+              }}>
+                <strong>Note:</strong> MFE is still mounted below (simulating persistent MFE container).
+                Watch what happens to it when you navigate to shell routes!
+              </div>
+            )}
+            {/* @ts-expect-error - custom element */}
+            <mfe-app />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Shell Root Layout
 const shellRootRoute = createRootRoute({
-  component: () => {
-    const [hash, setHash] = useState(window.location.hash || '#/');
-
-    useEffect(() => {
-      const updateHash = () => setHash(window.location.hash || '#/');
-      window.addEventListener('hashchange', updateHash);
-      return () => window.removeEventListener('hashchange', updateHash);
-    }, []);
-
-    // Check if we're on an MFE route
-    const isOnMfeRoute = hash.startsWith('#/mfe');
-
-    // Once MFE is loaded, keep it mounted to demonstrate the bug
-    if (isOnMfeRoute) {
-      mfeHasBeenLoaded = true;
-    }
-
-    return (
-      <div className="shell-app">
-        <div className="shell-header">
-          <h1>Shell Application (TanStack Router)</h1>
-          <nav className="shell-nav">
-            <Link to="/">Home</Link>
-            <Link to="/settings">Settings</Link>
-            <Link to="/mfe/page1">MFE Page 1</Link>
-            <Link to="/mfe/page2">MFE Page 2</Link>
-          </nav>
-        </div>
-        <div className="shell-content">
-          <div className="current-url">
-            Current URL: <strong>{hash}</strong>
-          </div>
-
-          {/* Shell content area */}
-          <Outlet />
-
-          {/*
-            MFE stays mounted after first load to demonstrate the bug.
-            In real MFE architectures, the MFE container often persists.
-          */}
-          {mfeHasBeenLoaded && (
-            <div style={{
-              marginTop: '20px',
-              display: isOnMfeRoute ? 'block' : 'block' // Always visible once loaded
-            }}>
-              {!isOnMfeRoute && (
-                <div style={{
-                  background: '#fff3cd',
-                  border: '1px solid #ffc107',
-                  padding: '10px',
-                  borderRadius: '4px',
-                  marginBottom: '10px'
-                }}>
-                  <strong>Note:</strong> MFE is still mounted below (simulating persistent MFE container).
-                  Watch what happens to it when you navigate to shell routes!
-                </div>
-              )}
-              {/* @ts-expect-error - custom element */}
-              <mfe-app />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  },
+  component: ShellLayout,
 });
 
 // Shell Home Page
