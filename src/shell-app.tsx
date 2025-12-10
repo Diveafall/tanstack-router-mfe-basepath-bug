@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import {
   createHashHistory,
   createRootRoute,
@@ -8,27 +9,88 @@ import {
   RouterProvider,
 } from '@tanstack/react-router';
 
+/**
+ * IMPORTANT: To demonstrate the bug, the MFE must stay mounted even when
+ * navigating to shell routes. This simulates real MFE architectures where:
+ *
+ * 1. The MFE is loaded once and stays in the DOM
+ * 2. The shell controls the URL via hash history
+ * 3. Both routers subscribe to the same hash changes
+ *
+ * The bug: When shell navigates to /settings, the MFE router (with basepath: /mfe)
+ * still receives the history event and tries to match /settings, showing 404.
+ */
+
+// Track if MFE has been loaded at least once
+let mfeHasBeenLoaded = false;
+
 // Shell Root Layout
 const shellRootRoute = createRootRoute({
-  component: () => (
-    <div className="shell-app">
-      <div className="shell-header">
-        <h1>Shell Application (TanStack Router)</h1>
-        <nav className="shell-nav">
-          <Link to="/">Home</Link>
-          <Link to="/settings">Settings</Link>
-          <Link to="/mfe/page1">MFE Page 1</Link>
-          <Link to="/mfe/page2">MFE Page 2</Link>
-        </nav>
-      </div>
-      <div className="shell-content">
-        <div className="current-url">
-          Current URL: <strong>{window.location.hash || '#/'}</strong>
+  component: () => {
+    const [hash, setHash] = useState(window.location.hash || '#/');
+
+    useEffect(() => {
+      const updateHash = () => setHash(window.location.hash || '#/');
+      window.addEventListener('hashchange', updateHash);
+      return () => window.removeEventListener('hashchange', updateHash);
+    }, []);
+
+    // Check if we're on an MFE route
+    const isOnMfeRoute = hash.startsWith('#/mfe');
+
+    // Once MFE is loaded, keep it mounted to demonstrate the bug
+    if (isOnMfeRoute) {
+      mfeHasBeenLoaded = true;
+    }
+
+    return (
+      <div className="shell-app">
+        <div className="shell-header">
+          <h1>Shell Application (TanStack Router)</h1>
+          <nav className="shell-nav">
+            <Link to="/">Home</Link>
+            <Link to="/settings">Settings</Link>
+            <Link to="/mfe/page1">MFE Page 1</Link>
+            <Link to="/mfe/page2">MFE Page 2</Link>
+          </nav>
         </div>
-        <Outlet />
+        <div className="shell-content">
+          <div className="current-url">
+            Current URL: <strong>{hash}</strong>
+          </div>
+
+          {/* Shell content area */}
+          <Outlet />
+
+          {/*
+            MFE stays mounted after first load to demonstrate the bug.
+            In real MFE architectures, the MFE container often persists.
+          */}
+          {mfeHasBeenLoaded && (
+            <div style={{
+              marginTop: '20px',
+              display: isOnMfeRoute ? 'block' : 'block' // Always visible once loaded
+            }}>
+              {!isOnMfeRoute && (
+                <div style={{
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
+                  padding: '10px',
+                  borderRadius: '4px',
+                  marginBottom: '10px'
+                }}>
+                  <strong>Note:</strong> MFE is still mounted below (simulating persistent MFE container).
+                  Watch what happens to it when you navigate to shell routes!
+                </div>
+              )}
+              {/* @ts-expect-error - custom element */}
+              <mfe-app />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  ),
+    );
+  },
 });
 
 // Shell Home Page
@@ -40,9 +102,13 @@ const homeRoute = createRoute({
       <h2>Home Page (Shell)</h2>
       <p>This is the shell application's home page.</p>
       <p>
-        Click on <strong>"MFE Page 1"</strong> or <strong>"MFE Page 2"</strong>{' '}
-        to load the MFE, then click <strong>"Settings"</strong> to see the bug.
+        <strong>To reproduce the bug:</strong>
       </p>
+      <ol>
+        <li>Click <strong>"MFE Page 1"</strong> to load the MFE</li>
+        <li>Then click <strong>"Settings"</strong> or <strong>"Home"</strong></li>
+        <li>Observe the MFE showing "404 - Not Found" below</li>
+      </ol>
     </div>
   ),
 });
@@ -56,33 +122,19 @@ const settingsRoute = createRoute({
       <h2>Settings Page (Shell)</h2>
       <p>This is the shell application's settings page.</p>
       <p>
-        <strong>If you see this page correctly</strong>, the bug is NOT
-        occurring.
-      </p>
-      <p>
-        <strong>If you see "404 - Not Found in MFE"</strong>, the bug IS
-        occurring.
+        Look at the MFE container below - it's showing a 404 error because
+        the MFE router is trying to match <code>/settings</code> even though
+        its basepath is <code>/mfe</code>.
       </p>
     </div>
   ),
 });
 
-// MFE Container Route - renders the MFE web component
+// MFE placeholder route (actual MFE is rendered in root layout)
 const mfeRoute = createRoute({
   getParentRoute: () => shellRootRoute,
   path: '/mfe/$',
-  component: () => {
-    // Render the MFE web component
-    // The MFE has its own TanStack Router with basepath: '/mfe'
-    return (
-      <div className="page">
-        <h2>MFE Container (Shell)</h2>
-        <p>The shell is rendering the MFE web component below:</p>
-        {/* @ts-expect-error - custom element */}
-        <mfe-app />
-      </div>
-    );
-  },
+  component: () => null, // MFE is rendered in root layout
 });
 
 // Create Shell Route Tree

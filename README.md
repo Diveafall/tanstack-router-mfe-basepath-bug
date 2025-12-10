@@ -23,6 +23,11 @@ MFE Application (TanStack Router, hash history, basepath: '/mfe')
 └── /mfe/page2
 ```
 
+**Key detail**: In this reproduction, the MFE stays mounted even when navigating to shell routes. This simulates real MFE architectures where:
+1. The MFE is loaded once and stays in the DOM (persistent container)
+2. The shell controls the URL via hash history
+3. Both routers subscribe to the same hash changes
+
 ## Steps to Reproduce
 
 1. **Install dependencies:**
@@ -39,23 +44,24 @@ MFE Application (TanStack Router, hash history, basepath: '/mfe')
    Navigate to `http://localhost:5173`
 
 4. **Trigger the bug:**
-   - Click **"MFE Page 1"** or **"MFE Page 2"** (MFE loads correctly)
-   - Click **"Settings"** in the shell navigation
-   - **BUG**: You'll see "404 - Not Found in MFE" instead of the shell's Settings page
+   - Click **"MFE Page 1"** to load the MFE (it works correctly)
+   - Click **"Settings"** or **"Home"** in the shell navigation
+   - **BUG**: The MFE container below shows "404 - Not Found in MFE"
+
+The MFE should **ignore** the `/settings` or `/` routes because they're outside its basepath (`/mfe`), but instead it tries to match them and fails.
 
 ## Expected vs Actual Behavior
 
 ### Expected
 When navigating to `/settings` (outside the MFE's basepath `/mfe`):
 - MFE router should **ignore** the history event (path is out of scope)
-- Shell router should handle `/settings` and render the Settings page
+- MFE should continue showing its last valid state, or show nothing
 
 ### Actual (Bug)
 When navigating to `/settings`:
 - MFE router **processes** the history event
 - MFE router tries to match `/settings` against its routes
-- No match → MFE's `defaultNotFoundComponent` renders
-- Shell's Settings page never appears
+- No match → MFE's `defaultNotFoundComponent` renders "404 - Not Found"
 
 ## Root Cause
 
@@ -111,3 +117,4 @@ See PR: https://github.com/TanStack/router/pull/6063
 
 - [Discussion #2103: Multiple routers in different packages](https://github.com/TanStack/router/discussions/2103)
 - [Discussion #2108: MFE "not found" issue](https://github.com/TanStack/router/discussions/2108)
+- [Issue #6064: Bug report](https://github.com/TanStack/router/issues/6064)
